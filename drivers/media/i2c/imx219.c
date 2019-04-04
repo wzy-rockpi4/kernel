@@ -7,6 +7,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#define DEBUG 1
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -265,7 +266,7 @@ static int reg_write(struct i2c_client *client, const u16 addr, const u8 data)
 	struct i2c_msg msg;
 	u8 tx[3];
 	int ret;
-
+	dev_dbg(&client->dev, "0x%04x : 0x%02x.\n", addr, data);
 	msg.addr = client->addr;
 	msg.buf = tx;
 	msg.len = 3;
@@ -303,7 +304,7 @@ static int reg_read(struct i2c_client *client, const u16 addr)
 			 addr, client->addr);
 		return ret;
 	}
-
+	dev_dbg(&client->dev, "0x%04x : 0x%02x.\n", addr, buf[0]);
 	return buf[0];
 }
 
@@ -330,6 +331,7 @@ static int imx219_s_stream(struct v4l2_subdev *sd, int enable)
 	u8 reg = 0x00;
 	int ret;
 
+	dev_dbg(&client->dev, "imx219_s_stream : \n");
 	if (!enable)
 		return reg_write_table(client, stop);
 
@@ -410,6 +412,7 @@ static int imx219_s_power(struct v4l2_subdev *sd, int on)
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct imx219 *priv = to_imx219(client);
 
+	dev_dbg(&client->dev, "imx219_s_power : %d.\n", on);
 	if (on)	{
 		dev_dbg(&client->dev, "imx219 power on\n");
 		clk_prepare_enable(priv->clk);
@@ -436,7 +439,9 @@ static int imx219_s_ctrl_test_pattern(struct v4l2_ctrl *ctrl)
 {
 	struct imx219 *priv =
 	    container_of(ctrl->handler, struct imx219, ctrl_handler);
+	struct i2c_client *client = v4l2_get_subdevdata(&priv->subdev);
 
+	dev_dbg(&client->dev, "imx219_s_ctrl_test_pattern : \n");
 	switch (ctrl->val) {
 	case TEST_PATTERN_DISABLED:
 		priv->test_pattern = 0x0000;
@@ -518,6 +523,7 @@ static int imx219_s_ctrl(struct v4l2_ctrl *ctrl)
 	u16 a_gain = 256;
 	u16 d_gain = 1;
 
+	dev_dbg(&client->dev, "imx219_s_ctrl : \n");
 	switch (ctrl->id) {
 	case V4L2_CID_HFLIP:
 		priv->hflip = ctrl->val;
@@ -658,6 +664,7 @@ static int imx219_set_fmt(struct v4l2_subdev *sd,
 	const struct imx219_mode *mode;
 	s64 h_blank, v_blank, pixel_rate;
 
+	dev_dbg(&client->dev, "imx219_set_fmt : \n");
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY)
 		return 0;
 
@@ -699,6 +706,7 @@ static int imx219_get_fmt(struct v4l2_subdev *sd,
 	struct imx219 *priv = to_imx219(client);
 	const struct imx219_mode *mode = priv->cur_mode;
 
+	dev_dbg(&client->dev, "imx219_get_fmt : \n");
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY)
 		return 0;
 
@@ -743,6 +751,7 @@ static int imx219_video_probe(struct i2c_client *client)
 	u16 chip_id;
 	int ret;
 
+	dev_dbg(&client->dev, "imx219_video_probe : \n");
 	ret = imx219_s_power(subdev, 1);
 	if (ret < 0)
 		return ret;
@@ -819,6 +828,7 @@ static int imx219_ctrls_init(struct v4l2_subdev *sd)
 	s64 pixel_rate, h_blank, v_blank;
 	int ret;
 
+	dev_dbg(&client->dev, "imx219_ctrls_init : \n");
 	v4l2_ctrl_handler_init(&priv->ctrl_handler, 10);
 	v4l2_ctrl_new_std(&priv->ctrl_handler, &imx219_ctrl_ops,
 			  V4L2_CID_HFLIP, 0, 1, 1, 0);
@@ -889,6 +899,7 @@ static int imx219_probe(struct i2c_client *client,
 	struct i2c_adapter *adapter = to_i2c_adapter(client->dev.parent);
 	int ret;
 
+	dev_dbg(&client->dev, "imx219_probe : \n");
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA)) {
 		dev_warn(&adapter->dev,
 			 "I2C-Adapter doesn't support I2C_FUNC_SMBUS_BYTE\n");
@@ -945,6 +956,7 @@ static int imx219_remove(struct i2c_client *client)
 {
 	struct imx219 *priv = to_imx219(client);
 
+	dev_dbg(&client->dev, "imx219_remove : \n");
 	v4l2_async_unregister_subdev(&priv->subdev);
 	media_entity_cleanup(&priv->subdev.entity);
 	v4l2_ctrl_handler_free(&priv->ctrl_handler);
