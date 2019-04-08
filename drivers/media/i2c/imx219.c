@@ -7,7 +7,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-#define DEBUG 1
+#define DEBUG 0
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -41,6 +41,18 @@
 #define IMX219_DIGITAL_EXPOSURE_DEFAULT	1575
 
 #define IMX219_EXP_LINES_MARGIN	4
+
+static u16 __imx219_ana_gain__ = 0x0100;
+static u16 __imx219_dig_gain__ = 0x0200;
+static u16 __imx219_exposure__ = 0x0627;
+static u16 __imx219_hflip__ = 0x00;
+static u16 __imx219_vflip__ = 0x00;
+
+module_param(__imx219_ana_gain__, ushort, S_IRUGO | S_IWUSR);
+module_param(__imx219_dig_gain__, ushort, S_IRUGO | S_IWUSR);
+module_param(__imx219_exposure__, ushort, S_IRUGO | S_IWUSR);
+module_param(__imx219_hflip__, ushort, S_IRUGO | S_IWUSR);
+module_param(__imx219_vflip__, ushort, S_IRUGO | S_IWUSR);
 
 static const s64 link_freq_menu_items[] = {
 	456000000,
@@ -165,6 +177,107 @@ static const struct imx219_reg imx219_init_tab_1920_1080_30fps[] = {
 	{IMX219_TABLE_END, 0x00}
 };
 
+#define IMX219_MaxGainIndex (97)
+u16 IMX219_sensorGainMapping[IMX219_MaxGainIndex][2] ={
+        { 64 ,0  },
+        { 68 ,12 },
+        { 71 ,23 },
+        { 74 ,33 },
+        { 77 ,42 },
+        { 81 ,52 },
+        { 84 ,59 },
+        { 87 ,66 },
+        { 90 ,73 },
+        { 93 ,79 },
+        { 96 ,85 },
+        { 100,91 },
+        { 103,96 },
+        { 106,101},
+        { 109,105},
+        { 113,110},
+        { 116,114},
+        { 120,118},
+        { 122,121},
+        { 125,125},
+        { 128,128},
+        { 132,131},
+        { 135,134},
+        { 138,137},
+        { 141,139},
+        { 144,142},
+        { 148,145},
+        { 151,147},
+        { 153,149},
+        { 157,151},
+        { 160,153},
+        { 164,156},
+        { 168,158},
+        { 169,159},
+        { 173,161},
+        { 176,163},
+        { 180,165},
+        { 182,166},
+        { 187,168},
+        { 189,169},
+        { 193,171},
+        { 196,172},
+        { 200,174},
+        { 203,175},
+        { 205,176},
+        { 208,177},
+        { 213,179},
+        { 216,180},
+        { 219,181},
+        { 222,182},
+        { 225,183},
+        { 228,184},
+        { 232,185},
+        { 235,186},
+        { 238,187},
+        { 241,188},
+        { 245,189},
+        { 249,190},
+        { 253,191},
+        { 256,192},
+        { 260,193},
+        { 265,194},
+        { 269,195},
+        { 274,196},
+        { 278,197},
+        { 283,198},
+        { 288,199},
+        { 293,200},
+        { 298,201},
+        { 304,202},
+        { 310,203},
+        { 315,204},
+        { 322,205},
+        { 328,206},
+        { 335,207},
+        { 342,208},
+        { 349,209},
+        { 357,210},
+        { 365,211},
+        { 373,212},
+        { 381,213},
+        { 400,215},
+        { 420,217},
+        { 432,218},
+        { 443,219},
+        { 468,221},
+        { 482,222},
+        { 497,223},
+        { 512,224},
+        { 529,225},
+        { 546,226},
+        { 566,227},
+        { 585,228},
+        { 607,229},
+        { 631,230},
+        { 656,231},
+        { 683,232}
+};
+
 static const struct imx219_reg start[] = {
 	{0x0100, 0x01},		/* mode select streaming on */
 	{IMX219_TABLE_END, 0x00}
@@ -266,7 +379,7 @@ static int reg_write(struct i2c_client *client, const u16 addr, const u8 data)
 	struct i2c_msg msg;
 	u8 tx[3];
 	int ret;
-	dev_dbg(&client->dev, "0x%04x : 0x%02x.\n", addr, data);
+	dev_dbg(&client->dev, "W[0x%04x]: 0x%02x.\n", addr, data);
 	msg.addr = client->addr;
 	msg.buf = tx;
 	msg.len = 3;
@@ -304,7 +417,7 @@ static int reg_read(struct i2c_client *client, const u16 addr)
 			 addr, client->addr);
 		return ret;
 	}
-	dev_dbg(&client->dev, "0x%04x : 0x%02x.\n", addr, buf[0]);
+	dev_dbg(&client->dev, "R[0x%04x]: 0x%02x.\n", addr, buf[0]);
 	return buf[0];
 }
 
@@ -321,6 +434,28 @@ static int reg_write_table(struct i2c_client *client,
 	}
 
 	return 0;
+}
+
+static u16 gain2reg(struct i2c_client *client, const u16 gain)
+{
+    u8 iI;
+    dev_dbg(&client->dev,"[IMX219]enter IMX219Gain2Reg function\n");
+
+    for (iI = 0; iI < (IMX219_MaxGainIndex-1); iI++) {
+        if(gain <IMX219_sensorGainMapping[iI][0]) {
+            break;
+        }
+        if(gain < IMX219_sensorGainMapping[iI][0]) {
+            return IMX219_sensorGainMapping[iI][1];
+        }
+    }
+    if(gain != IMX219_sensorGainMapping[iI][0]) {
+        dev_info(&client->dev,
+                "Gain mapping don't correctly:%d %d \n",
+                gain, IMX219_sensorGainMapping[iI][0]);
+    }
+    dev_dbg(&client->dev,"exit IMX219MIPIGain2Reg function\n");
+    return IMX219_sensorGainMapping[iI-1][1];
 }
 
 /* V4L2 subdev video operations */
@@ -355,6 +490,20 @@ static int imx219_s_stream(struct v4l2_subdev *sd, int enable)
 
 	if (ret)
 		return ret;
+
+    // V4L2_CID_GAIN IS FOR ANALOGUE GAIN
+    ret |= reg_write(client, 0x0157, gain2reg(client, __imx219_ana_gain__));
+
+    // V4L2_CID_ANALOGUE_GAIN IS FOR DIGITAL GAIN
+    ret |= reg_write(client, 0x0158, __imx219_dig_gain__ >> 8);
+    ret |= reg_write(client, 0x0159, __imx219_dig_gain__ & 0xff);
+
+    // V4L2_CID_EXPOSURE
+    ret |= reg_write(client, 0x015a, __imx219_exposure__ >> 8);
+    ret |= reg_write(client, 0x015b, __imx219_exposure__ & 0xff);
+
+    priv->hflip = __imx219_hflip__;
+    priv->vflip = __imx219_vflip__;
 
 	/* Handle flip/mirror */
 	if (priv->hflip)
@@ -512,6 +661,8 @@ static int imx219_s_ctrl_test_pattern(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 
+
+
 static int imx219_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct imx219 *priv =
@@ -523,7 +674,7 @@ static int imx219_s_ctrl(struct v4l2_ctrl *ctrl)
 	u16 a_gain = 256;
 	u16 d_gain = 1;
 
-	dev_dbg(&client->dev, "imx219_s_ctrl : \n");
+	dev_dbg(&client->dev, "imx219_s_ctrl : 0x%08x: 0x%08x .\n", ctrl->id, ctrl->val);
 	switch (ctrl->id) {
 	case V4L2_CID_HFLIP:
 		priv->hflip = ctrl->val;
@@ -533,62 +684,63 @@ static int imx219_s_ctrl(struct v4l2_ctrl *ctrl)
 		priv->vflip = ctrl->val;
 		break;
 
-	case V4L2_CID_ANALOGUE_GAIN:
-	case V4L2_CID_GAIN:
-		/*
-		 * hal transfer (gain * 256)  to kernel
-		 * than divide into analog gain & digital gain in kernel
-		 */
 
-		gain = ctrl->val;
-		if (gain < 256)
-			gain = 256;
-		if (gain > 43663)
-			gain = 43663;
-		if (gain >= 256 && gain <= 2728) {
-			a_gain = gain;
-			d_gain = 1 * 256;
-		} else {
-			a_gain = 2728;
-			d_gain = (gain * 256) / a_gain;
-		}
+    case V4L2_CID_ANALOGUE_GAIN:
+    case V4L2_CID_GAIN:
+        /*
+         * hal transfer (gain * 256)  to kernel
+         * than divide into analog gain & digital gain in kernel
+         */
 
-		/*
-		 * Analog gain, reg range[0, 232], gain value[1, 10.66]
-		 * reg = 256 - 256 / again
-		 * a_gain here is 256 multify
-		 * so the reg = 256 - 256 * 256 / a_gain
-		 */
-		priv->analogue_gain = (256 - (256 * 256) / a_gain);
-		if (a_gain < 256)
-			priv->analogue_gain = 0;
-		if (priv->analogue_gain > 232)
-			priv->analogue_gain = 232;
+        gain = ctrl->val;
+        if (gain < 256)
+            gain = 256;
+        if (gain > 43663)
+            gain = 43663;
+        if (gain >= 256 && gain <= 2728) {
+            a_gain = gain;
+            d_gain = 1 * 256;
+        } else {
+            a_gain = 2728;
+            d_gain = (gain * 256) / a_gain;
+        }
 
-		/*
-		 * Digital gain, reg range[256, 4095], gain rage[1, 16]
-		 * reg = dgain * 256
-		 */
-		priv->digital_gain = d_gain;
-		if (priv->digital_gain < 256)
-			priv->digital_gain = 256;
-		if (priv->digital_gain > 4095)
-			priv->digital_gain = 4095;
+        /*
+         * Analog gain, reg range[0, 232], gain value[1, 10.66]
+         * reg = 256 - 256 / again
+         * a_gain here is 256 multify
+         * so the reg = 256 - 256 * 256 / a_gain
+         */
+        priv->analogue_gain = (256 - (256 * 256) / a_gain);
+        if (a_gain < 256)
+            priv->analogue_gain = 0;
+        if (priv->analogue_gain > 232)
+            priv->analogue_gain = 232;
 
-		/*
-		 * for bank A and bank B switch
-		 * exposure time , gain, vts must change at the same time
-		 * so the exposure & gain can reflect at the same frame
-		 */
+        /*
+         * Digital gain, reg range[256, 4095], gain rage[1, 16]
+         * reg = dgain * 256
+         */
+        priv->digital_gain = d_gain;
+        if (priv->digital_gain < 256)
+            priv->digital_gain = 256;
+        if (priv->digital_gain > 4095)
+            priv->digital_gain = 4095;
 
-		ret = reg_write(client, 0x0157, priv->analogue_gain);
-		ret |= reg_write(client, 0x0158, priv->digital_gain >> 8);
-		ret |= reg_write(client, 0x0159, priv->digital_gain & 0xff);
+        /*
+         * for bank A and bank B switch
+         * exposure time , gain, vts must change at the same time
+         * so the exposure & gain can reflect at the same frame
+         */
+
+        ret = reg_write(client, 0x0157, priv->analogue_gain);
+        ret |= reg_write(client, 0x0158, priv->digital_gain >> 8);
+        ret |= reg_write(client, 0x0159, priv->digital_gain & 0xff);
 
 		return ret;
 
 	case V4L2_CID_EXPOSURE:
-		priv->exposure_time = ctrl->val;
+        priv->exposure_time = ctrl->val;
 
 		ret = reg_write(client, 0x015a, priv->exposure_time >> 8);
 		ret |= reg_write(client, 0x015b, priv->exposure_time & 0xff);
